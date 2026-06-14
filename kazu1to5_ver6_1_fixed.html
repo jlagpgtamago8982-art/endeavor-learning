@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>なんにんいるかな Ver6.1</title>
+<style>
+body{font-family:sans-serif;text-align:center;background:#f5fbff;padding:10px}
+button{font-size:1.1em;padding:10px;margin:4px}
+.hidden{display:none}
+#chars{min-height:220px;border:2px solid #99c;background:white;border-radius:15px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.row{display:flex;gap:18px}.c{font-size:56px}
+#msg{font-size:1.6em;height:40px} #timer,#status,#combo{font-size:1.2em}
+</style></head><body>
+
+<div id="menu">
+<h1>なんにんいるかな</h1>
+<button id="normalBtn">ふつう</button>
+<button id="timeBtn">タイムアタック</button>
+<button id="minuteBtn">1ぷんチャレンジ</button><br>
+最大の数 <select id="max"><option>5</option><option>10</option></select>
+問題数 <select id="count"><option>5</option><option>10</option><option>20</option></select>
+<div id="best"></div>
+</div>
+
+<div id="game" class="hidden">
+<div id="timer"></div>
+<div id="status"></div>
+<div id="combo"></div>
+<div id="chars"></div>
+<div id="msg"></div>
+<div id="ans"></div>
+<button id="next" class="hidden">つぎへ</button>
+</div>
+
+<script>
+const menu=document.getElementById('menu');
+const game=document.getElementById('game');
+const timer=document.getElementById('timer');
+const status=document.getElementById('status');
+const comboEl=document.getElementById('combo');
+const chars=document.getElementById('chars');
+const msg=document.getElementById('msg');
+const ansDiv=document.getElementById('ans');
+const nextBtn=document.getElementById('next');
+
+const icons=["🐶","🐱","🐰","🐧","👸"];
+let mode,maxN,total,q,correct,target,startT,timerH,combo;
+
+function beep(f,d){
+ try{
+ const a=new(window.AudioContext||window.webkitAudioContext)();
+ const o=a.createOscillator();
+ const g=a.createGain();
+ o.frequency.value=f;
+ o.connect(g); g.connect(a.destination);
+ g.gain.value=.05;
+ o.start();
+ o.stop(a.currentTime+d);
+ }catch(e){}
+}
+
+function showBest(){
+ document.getElementById('best').innerHTML=
+ "🏆最速:"+ (localStorage.getItem('bestTime')||"-")+"秒<br>"+
+ "🏆1ぷん最高:"+ (localStorage.getItem('bestMinute')||"-")+"問";
+}
+showBest();
+
+for(let i=1;i<=10;i++){
+ const b=document.createElement('button');
+ b.textContent=i;
+ b.addEventListener('click',()=>answerClick(i));
+ ansDiv.appendChild(b);
+}
+
+document.getElementById('normalBtn').addEventListener('click',()=>start('normal'));
+document.getElementById('timeBtn').addEventListener('click',()=>start('time'));
+document.getElementById('minuteBtn').addEventListener('click',()=>start('minute'));
+
+function start(m){
+ mode=m;
+ maxN=Number(document.getElementById('max').value);
+ total=Number(document.getElementById('count').value);
+ q=0; correct=0; combo=0;
+
+ menu.classList.add('hidden');
+ game.classList.remove('hidden');
+
+ [...ansDiv.children].forEach((b,i)=>{
+   b.style.display=(i+1<=maxN)?'inline-block':'none';
+ });
+
+ if(timerH) clearInterval(timerH);
+ startT=Date.now();
+
+ if(mode==='time'){
+   timerH=setInterval(()=>{
+      timer.textContent="⏱️ "+((Date.now()-startT)/1000).toFixed(1)+"秒";
+   },100);
+ }else if(mode==='minute'){
+   timerH=setInterval(()=>{
+      const left=Math.max(0,60-Math.floor((Date.now()-startT)/1000));
+      timer.textContent="⏳ のこり "+left+"秒";
+      if(left<=0) finishMinute();
+   },200);
+ }else{
+   timer.textContent="";
+ }
+
+ newQ();
+}
+
+function draw(n,icon){
+ chars.innerHTML="";
+ const row=document.createElement('div');
+ row.className='row';
+ for(let i=0;i<n;i++){
+   const s=document.createElement('div');
+   s.className='c';
+   s.textContent=icon;
+   row.appendChild(s);
+ }
+ chars.appendChild(row);
+}
+
+function newQ(){
+ q++;
+ if((mode==='normal'||mode==='time') && q>total){
+   finishNormal(); return;
+ }
+ msg.textContent="";
+ nextBtn.classList.add('hidden');
+
+ target=Math.floor(Math.random()*maxN)+1;
+ draw(target, icons[Math.floor(Math.random()*icons.length)]);
+
+ status.textContent=(mode==='minute')
+   ? `せいかい ${correct}問`
+   : `もんだい ${q}/${total}　せいかい ${correct}`;
+
+ comboEl.textContent=combo>=2?`⭐${combo}れんぞく！`:'';
+}
+
+function answerClick(n){
+ if(msg.textContent) return;
+
+ if(n===target){
+   correct++; combo++;
+   beep(880,.1);
+   msg.textContent="⭕せいかい！";
+
+   if(mode==='minute'){
+      setTimeout(newQ,250);
+   }else{
+      nextBtn.classList.remove('hidden');
+   }
+ }else{
+   combo=0;
+   beep(220,.2);
+
+   if(mode==='time'){
+      document.body.innerHTML=`<h1>💥しっぱい！</h1><h2>${q-1}問クリア</h2><button onclick="location.reload()">もどる</button>`;
+      return;
+   }
+
+   if(mode==='minute'){
+      setTimeout(newQ,250);
+      return;
+   }
+
+   msg.textContent="❌こたえは "+target;
+   nextBtn.classList.remove('hidden');
+ }
+}
+
+nextBtn.addEventListener('click',newQ);
+
+function finishNormal(){
+ clearInterval(timerH);
+ let html=`<h1>🎉おしまい</h1><h2>${correct}/${total}せいかい</h2>`;
+
+ if(mode==='time'){
+   const sec=((Date.now()-startT)/1000).toFixed(1);
+   html+=`<h3>${sec}秒</h3>`;
+   const best=localStorage.getItem('bestTime');
+   if(!best || Number(sec)<Number(best)){
+      localStorage.setItem('bestTime',sec);
+      html+='<h3>🏆ベスト！</h3>';
+   }
+ }
+
+ html+='<button onclick="location.reload()">さいしょから</button>';
+ document.body.innerHTML=html;
+}
+
+function finishMinute(){
+ clearInterval(timerH);
+ const best=Number(localStorage.getItem('bestMinute')||0);
+ if(correct>best) localStorage.setItem('bestMinute',correct);
+ document.body.innerHTML=`<h1>⏳1ぷんチャレンジ終了</h1><h2>${correct}問せいかい！</h2><button onclick="location.reload()">さいしょから</button>`;
+}
+</script>
+</body></html>
